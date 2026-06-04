@@ -172,7 +172,7 @@ export default function App() {
     let d = new Date(now.getFullYear(), now.getMonth(), setup.creditDay);
     if (d > now) d = new Date(now.getFullYear(), now.getMonth() - 1, setup.creditDay);
     return d.toISOString().slice(0, 10);
-  }, [setup]);
+  }, [setup?.creditDay, setup?.salary]);
 
   const cycleEnd = useMemo(() => {
     const cs = new Date(cycleStart);
@@ -198,7 +198,7 @@ export default function App() {
     let next = new Date(now.getFullYear(), now.getMonth(), setup.creditDay);
     if (next <= now) next = new Date(now.getFullYear(), now.getMonth() + 1, setup.creditDay);
     return Math.ceil((next - now) / 86400000);
-  }, [setup]);
+  }, [setup?.creditDay, setup?.salary]);
 
   const noSpendStreak = useMemo(() => {
     let streak = 0;
