@@ -4,17 +4,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from "recharts";
 
-// ─── HELPERS ────────────────────────────────────────────────────────────────
 const load = (key, def) => {
   try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : def; }
   catch { return def; }
 };
 const save = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
-const fmt = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const today = () => new Date().toISOString().slice(0, 10);
 const nowMs = () => Date.now();
 
-// ─── CATEGORIES ─────────────────────────────────────────────────────────────
 const CATS = [
   { id: "food",     label: "Food",          emoji: "🍔", color: "#f59e0b" },
   { id: "rent",     label: "Rent",          emoji: "🏠", color: "#6366f1" },
@@ -30,11 +27,37 @@ const CATS = [
 ];
 const CAT_MAP = Object.fromEntries(CATS.map(c => [c.id, c]));
 
+const CURRENCIES = [
+  { symbol: "₹", code: "INR", locale: "en-IN", label: "Indian Rupee" },
+  { symbol: "$", code: "USD", locale: "en-US", label: "US Dollar" },
+  { symbol: "£", code: "GBP", locale: "en-GB", label: "British Pound" },
+  { symbol: "€", code: "EUR", locale: "de-DE", label: "Euro" },
+  { symbol: "د.إ",code:"AED", locale: "ar-AE", label: "UAE Dirham" },
+  { symbol: "৳", code: "BDT", locale: "bn-BD", label: "Bangladeshi Taka" },
+];
+
+const NL_CATEGORIES = {
+  "swiggy|zomato|lunch|dinner|breakfast|food|restaurant|cafe|eat|meal|pizza|burger": "food",
+  "uber|ola|petrol|fuel|auto|bus|metro|train|cab|travel|rapido": "transport",
+  "rent|house|flat|pg|room|hostel|landlord": "rent",
+  "netflix|spotify|prime|hotstar|youtube|subscription|zee|sony": "subscriptions",
+  "medicine|doctor|hospital|pharmacy|health|clinic|chemist|medical": "health",
+  "amazon|flipkart|shopping|clothes|shirt|shoes|myntra|meesho|dress": "shopping",
+  "electricity|water|gas|wifi|internet|bill|recharge|utilities": "utilities",
+  "emi|loan|bank|equitas|hdfc|icici|sbi": "emi",
+  "movie|game|bowling|concert|event|fun|entertainment": "entertainment",
+  "school|college|course|book|exam|tuition|education|udemy": "education",
+};
+
 const EMOJI_GRID = ["🎁","🐶","🐱","🚀","🌟","💡","🎸","🏋️","🎨","🌿","☕","🍕","🚂","🏖️","💼","🎯"];
 
-// ─── STYLES ──────────────────────────────────────────────────────────────────
+const STORAGE_KEYS = [
+  "expenses","budgets","goals","emis","subs",
+  "splits","setup","pin","themeMode","customCats","currency","wishlist"
+];
+
 const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+@import url('[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap)');
 * { box-sizing: border-box; }
 body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; }
 .hide-scroll::-webkit-scrollbar { display: none; }
@@ -52,22 +75,36 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; }
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
 @keyframes pulse-glow {
   0%,100% { box-shadow: 0 0 20px #10b98155; }
   50%      { box-shadow: 0 0 40px #10b981aa; }
+}
+@keyframes bounce {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes badgeGlow {
+  0%,100% { box-shadow: 0 0 8px var(--glow-color, #10b981); }
+  50% { box-shadow: 0 0 16px var(--glow-color, #10b981); }
 }
 .blob1 { animation: blob 7s infinite ease-in-out; }
 .blob2 { animation: blob 9s infinite ease-in-out 2s; }
 .blob3 { animation: blob 11s infinite ease-in-out 4s; }
 .slide-up { animation: slideUp 0.35s cubic-bezier(.32,2,.55,.89) both; }
 .fade-in  { animation: fadeIn 0.3s ease both; }
+.fade-out { animation: fadeOut 0.3s ease both; }
 .fab-glow { animation: pulse-glow 2.5s infinite; }
+.bounce-arrow { animation: bounce 1s infinite; }
+.badge-glow { animation: badgeGlow 2s infinite; }
 .btn-press:active { transform: scale(0.93); }
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
 `;
 
-// ─── THEME ───────────────────────────────────────────────────────────────────
 const DARK = {
   bg:      "#0a0f1e",
   bg2:     "#0d1117",
@@ -91,7 +128,6 @@ const LIGHT = {
   accent2: "#4f46e5",
 };
 
-// ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [darkMode, setDarkMode] = useState(() => {
     const saved = load("themeMode", "device");
@@ -102,6 +138,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState(() => load("themeMode", "device"));
   const T = darkMode ? DARK : LIGHT;
 
+  const [currency, setCurrency] = useState(() => load("currency", CURRENCIES[0]));
   const [setup, setSetup] = useState(() => load("setup", null));
   const [pin, setPin] = useState(() => load("pin", null));
   const [pinUnlocked, setPinUnlocked] = useState(false);
@@ -119,8 +156,15 @@ export default function App() {
   const [moreTab, setMoreTab] = useState("emi");
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState(new Set());
 
-  // Persist
+  const fmt = useCallback((n) => 
+    currency.symbol + Number(n || 0).toLocaleString(currency.locale),
+    [currency]
+  );
+
+  useEffect(() => { save("currency", currency); }, [currency]);
   useEffect(() => { save("expenses", expenses); },     [expenses]);
   useEffect(() => { save("budgets",  budgets);  },     [budgets]);
   useEffect(() => { save("goals",    goals);    },     [goals]);
@@ -130,8 +174,17 @@ export default function App() {
   useEffect(() => { save("splits",   splits);   },     [splits]);
   useEffect(() => { save("customCats", customCats); }, [customCats]);
 
-  // Theme
   useEffect(() => { save("themeMode", themeMode); }, [themeMode]);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (confirmDelete !== null) {
+        setConfirmDelete(null);
+      }
+    };
+    document.addEventListener('click', handleClick, true);
+    return () => document.removeEventListener('click', handleClick, true);
+  }, [confirmDelete]);
 
   const handleTheme = (mode) => {
     setThemeMode(mode);
@@ -140,7 +193,6 @@ export default function App() {
     if (mode === "device") setDarkMode(window.matchMedia("(prefers-color-scheme: dark)").matches);
   };
 
-  // Recurring auto-add
   useEffect(() => {
     if (!setup) return;
     const recur = expenses.filter(e => e.recurring);
@@ -148,25 +200,22 @@ export default function App() {
     recur.forEach(e => {
       const alreadyAdded = expenses.some(x => x.recurParent === e.id && x.date?.startsWith(thisMonth));
       if (!alreadyAdded && !e.date?.startsWith(thisMonth)) {
-        const newExp = { ...e, id: Date.now() + Math.random(), date: today(), recurParent: e.id, recurring: false };
+        const newExp = { ...e, id: crypto.randomUUID(), date: today(), recurParent: e.id, recurring: false };
         setExpenses(prev => [...prev, newExp]);
       }
     });
   }, []);
 
-  // PIN screen
   if (pin && !pinUnlocked) {
     return <PinScreen T={T} pin={pin} onUnlock={() => setPinUnlocked(true)} darkMode={darkMode} />;
   }
 
-  // Setup screen
   if (!setup) {
-    return <SetupScreen T={T} onDone={(s) => { save("setup", s); setSetup(s); }} darkMode={darkMode} />;
+    return <SetupScreen T={T} onDone={(s) => { save("setup", s); setSetup(s); }} darkMode={darkMode} currency={currency} setCurrency={setCurrency} fmt={fmt} />;
   }
 
   const allCats = [...CATS, ...customCats.map(c => ({ ...c, custom: true }))];
 
-  // Cycle helpers
   const cycleStart = useMemo(() => {
     const now = new Date();
     let d = new Date(now.getFullYear(), now.getMonth(), setup.creditDay);
@@ -184,6 +233,13 @@ export default function App() {
     expenses.filter(e => e.date >= cycleStart && e.date <= cycleEnd),
     [expenses, cycleStart, cycleEnd]
   );
+
+  const prevCycleExpenses = useMemo(() => {
+    const cs = new Date(cycleStart);
+    const prevStart = new Date(cs.getFullYear(), cs.getMonth() - 1, setup.creditDay);
+    const prevEnd = new Date(cs.getFullYear(), cs.getMonth(), setup.creditDay - 1);
+    return expenses.filter(e => e.date >= prevStart.toISOString().slice(0,10) && e.date <= prevEnd.toISOString().slice(0,10));
+  }, [expenses, cycleStart, setup?.creditDay]);
 
   const totalSpent = useMemo(() => cycleExpenses.reduce((a, e) => a + Number(e.amount), 0), [cycleExpenses]);
   const remaining  = (setup.salary || 0) - totalSpent;
@@ -221,12 +277,24 @@ export default function App() {
   }, [cycleExpenses]);
 
   const addExpense = useCallback((exp) => {
-    setExpenses(prev => [...prev, { ...exp, id: Date.now() + Math.random() }]);
+    setExpenses(prev => [...prev, { ...exp, id: crypto.randomUUID() }]);
   }, []);
 
   const deleteExpense = useCallback((id) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
   }, []);
+
+  const handleDeleteWithConfirm = useCallback((id, deleteFn, e) => {
+    e.stopPropagation();
+    if (confirmDelete === id) {
+      deleteFn(id);
+      setConfirmDelete(null);
+    } else {
+      setConfirmDelete(id);
+    }
+  }, [confirmDelete]);
+
+  const todayCount = useMemo(() => expenses.filter(e => e.date === today()).length, [expenses]);
 
   const s = {
     bg: { background: T.bg, minHeight: "100vh", color: T.text, fontFamily: "'DM Sans', sans-serif" }
@@ -236,17 +304,15 @@ export default function App() {
     <div style={{ ...s.bg, display: "flex", justifyContent: "center" }}>
       <style>{STYLES}</style>
       <div style={{ width: "100%", maxWidth: 448, position: "relative", minHeight: "100vh", background: T.bg }}>
-        {/* Main content */}
         <div style={{ paddingBottom: 100 }} className="hide-scroll">
-          {tab === "home"    && <HomeTab T={T} setup={setup} totalSpent={totalSpent} remaining={remaining} daysLeft={daysLeft} paydayCountdown={paydayCountdown} noSpendStreak={noSpendStreak} spentByCat={spentByCat} cycleExpenses={cycleExpenses} budgets={budgets} allCats={allCats} emis={emis} subs={subs} onSettings={() => setShowSettings(true)} />}
-          {tab === "expenses"&& <ExpensesTab T={T} expenses={expenses} allCats={allCats} onDelete={deleteExpense} onEdit={(id, data) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))} />}
-          {tab === "budget"  && <BudgetTab T={T} budgets={budgets} setBudgets={(b) => { setBudgets(b); save("budgets", b); }} allCats={allCats} spentByCat={spentByCat} salary={setup.salary} />}
-          {tab === "goals"   && <GoalsTab T={T} goals={goals} setGoals={setGoals} wishlist={wishlist} setWishlist={setWishlist} salary={setup.salary} />}
-          {tab === "reports" && <ReportsTab T={T} expenses={expenses} cycleExpenses={cycleExpenses} allCats={allCats} spentByCat={spentByCat} salary={setup.salary} />}
-          {tab === "more"    && <MoreTab T={T} moreTab={moreTab} setMoreTab={setMoreTab} emis={emis} setEmis={setEmis} subs={subs} setSubs={setSubs} splits={splits} setSplits={setSplits} salary={setup.salary} />}
+          {tab === "home"    && <HomeTab T={T} setup={setup} totalSpent={totalSpent} remaining={remaining} daysLeft={daysLeft} paydayCountdown={paydayCountdown} noSpendStreak={noSpendStreak} spentByCat={spentByCat} cycleExpenses={cycleExpenses} prevCycleExpenses={prevCycleExpenses} budgets={budgets} allCats={allCats} emis={emis} subs={subs} onSettings={() => setShowSettings(true)} fmt={fmt} cycleStart={cycleStart} cycleEnd={cycleEnd} goals={goals} dismissedAlerts={dismissedAlerts} setDismissedAlerts={setDismissedAlerts} />}
+          {tab === "expenses"&& <ExpensesTab T={T} expenses={expenses} allCats={allCats} onDelete={deleteExpense} onEdit={(id, data) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
+          {tab === "budget"  && <BudgetTab T={T} budgets={budgets} setBudgets={(b) => { setBudgets(b); save("budgets", b); }} allCats={allCats} spentByCat={spentByCat} salary={setup.salary} fmt={fmt} />}
+          {tab === "goals"   && <GoalsTab T={T} goals={goals} setGoals={setGoals} wishlist={wishlist} setWishlist={setWishlist} salary={setup.salary} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
+          {tab === "reports" && <ReportsTab T={T} expenses={expenses} cycleExpenses={cycleExpenses} allCats={allCats} spentByCat={spentByCat} salary={setup.salary} fmt={fmt} subs={subs} emis={emis} remaining={remaining} noSpendStreak={noSpendStreak} />}
+          {tab === "more"    && <MoreTab T={T} moreTab={moreTab} setMoreTab={setMoreTab} emis={emis} setEmis={setEmis} subs={subs} setSubs={setSubs} splits={splits} setSplits={setSplits} salary={setup.salary} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
         </div>
 
-        {/* FAB */}
         <button
           className="btn-press fab-glow"
           onClick={() => setShowAdd(true)}
@@ -260,25 +326,21 @@ export default function App() {
           }}
         >+</button>
 
-        {/* Bottom Nav */}
-        <BottomNav T={T} tab={tab} setTab={setTab} darkMode={darkMode} />
+        <BottomNav T={T} tab={tab} setTab={setTab} darkMode={darkMode} todayCount={todayCount} />
 
-        {/* Add Expense Modal */}
         {showAdd && (
-          <AddExpenseModal T={T} allCats={allCats} budgets={budgets} spentByCat={spentByCat} onAdd={addExpense} onClose={() => setShowAdd(false)} customCats={customCats} setCustomCats={setCustomCats} />
+          <AddExpenseModal T={T} allCats={allCats} budgets={budgets} spentByCat={spentByCat} onAdd={addExpense} onClose={() => setShowAdd(false)} customCats={customCats} setCustomCats={setCustomCats} fmt={fmt} />
         )}
 
-        {/* Settings Modal */}
         {showSettings && (
-          <SettingsModal T={T} setup={setup} setSetup={(s) => { setSetup(s); save("setup", s); }} pin={pin} setPin={(p) => { setPin(p); save("pin", p); }} themeMode={themeMode} onTheme={handleTheme} expenses={expenses} setExpenses={setExpenses} budgets={budgets} goals={goals} emis={emis} subs={subs} onClose={() => setShowSettings(false)} darkMode={darkMode} />
+          <SettingsModal T={T} setup={setup} setSetup={(s) => { setSetup(s); save("setup", s); }} pin={pin} setPin={(p) => { setPin(p); save("pin", p); }} themeMode={themeMode} onTheme={handleTheme} expenses={expenses} setExpenses={setExpenses} budgets={budgets} goals={goals} emis={emis} subs={subs} onClose={() => setShowSettings(false)} darkMode={darkMode} currency={currency} setCurrency={setCurrency} fmt={fmt} setBudgets={setBudgets} setGoals={setGoals} setEmis={setEmis} setSubs={setSubs} setSplits={setSplits} splits={splits} wishlist={wishlist} setWishlist={setWishlist} setCustomCats={setCustomCats} />
         )}
       </div>
     </div>
   );
 }
 
-// ─── SETUP SCREEN ─────────────────────────────────────────────────────────────
-function SetupScreen({ T, onDone }) {
+function SetupScreen({ T, onDone, currency, setCurrency, fmt }) {
   const [salary, setSalary] = useState("");
   const [creditDay, setCreditDay] = useState(1);
   const valid = salary > 0;
@@ -288,6 +350,15 @@ function SetupScreen({ T, onDone }) {
       <div style={{ fontSize: 26, fontWeight: 700, color: T.text, marginBottom: 8 }}>Setup Your Wallet</div>
       <div style={{ color: T.muted, marginBottom: 32, textAlign: "center" }}>Enter your monthly take-home salary and salary credit date to get started.</div>
       <div style={{ width: "100%", maxWidth: 360 }}>
+        <Label T={T}>💱 Currency</Label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+          {CURRENCIES.map(c => (
+            <button key={c.code} onClick={() => setCurrency(c)}
+              style={{ padding: "8px 12px", borderRadius: 10, border: `2px solid ${currency.code === c.code ? T.accent : T.border}`, background: currency.code === c.code ? T.accent + "22" : T.card, color: currency.code === c.code ? T.accent : T.muted, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              {c.symbol} {c.code}
+            </button>
+          ))}
+        </div>
         <Label T={T}>Monthly Take-Home Salary</Label>
         <input type="number" placeholder="e.g. 50000" value={salary} onChange={e => setSalary(e.target.value)}
           style={{ ...inputStyle(T), width: "100%", marginBottom: 20 }} />
@@ -304,7 +375,6 @@ function SetupScreen({ T, onDone }) {
   );
 }
 
-// ─── PIN SCREEN ───────────────────────────────────────────────────────────────
 function PinScreen({ T, pin, onUnlock }) {
   const [entered, setEntered] = useState("");
   const [err, setErr] = useState(false);
@@ -339,8 +409,7 @@ function PinScreen({ T, pin, onUnlock }) {
   );
 }
 
-// ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
-function BottomNav({ T, tab, setTab }) {
+function BottomNav({ T, tab, setTab, todayCount }) {
   const tabs = [
     { id: "home",     icon: "🏠", label: "Home" },
     { id: "expenses", icon: "💸", label: "Expenses" },
@@ -363,23 +432,89 @@ function BottomNav({ T, tab, setTab }) {
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
             gap: 2, padding: "6px 4px", border: "none", cursor: "pointer",
             background: tab === t.id ? (T.accent + "22") : "transparent",
-            borderRadius: 20, transition: "all 0.2s",
+            borderRadius: 20, transition: "all 0.2s", position: "relative",
           }}>
-          <span style={{ fontSize: 18 }}>{t.icon}</span>
+          <span style={{ fontSize: 18, position: "relative" }}>
+            {t.icon}
+            {t.id === "expenses" && todayCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -8, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{todayCount}</span>
+            )}
+          </span>
           <span style={{ fontSize: 9, fontWeight: 600, color: tab === t.id ? T.accent : T.muted, letterSpacing: 0.3 }}>{t.label}</span>
+          {tab === t.id && (
+            <div style={{ width: 4, height: 4, borderRadius: "50%", background: T.accent, marginTop: 2 }} />
+          )}
         </button>
       ))}
     </div>
   );
 }
 
-// ─── HOME TAB ────────────────────────────────────────────────────────────────
-function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, noSpendStreak, spentByCat, cycleExpenses, budgets, allCats, emis, subs, onSettings }) {
+function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, noSpendStreak, spentByCat, cycleExpenses, prevCycleExpenses, budgets, allCats, emis, subs, onSettings, fmt, cycleStart, cycleEnd, goals, dismissedAlerts, setDismissedAlerts }) {
   const pct = Math.min(100, (totalSpent / setup.salary) * 100);
   const dailyBudget = remaining > 0 ? remaining / daysLeft : 0;
   const emiTotal = emis.reduce((a, e) => a + Number(e.monthly || 0), 0);
   const subTotal = subs.reduce((a, s) => a + (s.cycle === "annual" ? s.amount / 12 : Number(s.amount || 0)), 0);
   const emiPct = setup.salary ? (emiTotal / setup.salary * 100).toFixed(0) : 0;
+
+  const personality = useMemo(() => {
+    if (pct < 30) return { label: "🧘 Zen Saver", color: "#10b981", msg: "Incredible discipline this cycle!" };
+    if (pct < 60) return { label: "⚖️ Balanced", color: "#6366f1", msg: "Healthy spending habits this cycle." };
+    if (pct < 80) return { label: "⚠️ Watch Out", color: "#f59e0b", msg: "Spending is picking up pace." };
+    if (pct < 100) return { label: "🔥 Danger Zone", color: "#ef4444", msg: "Almost at your limit!" };
+    return { label: "💀 Overbudget", color: "#dc2626", msg: "You've exceeded your salary!" };
+  }, [pct]);
+
+  const forecast = useMemo(() => {
+    const csDate = new Date(cycleStart);
+    const nowDate = new Date();
+    const daysGone = Math.max(1, Math.ceil((nowDate - csDate) / 86400000));
+    const ceDate = new Date(cycleEnd);
+    const totalDays = Math.max(1, Math.ceil((ceDate - csDate) / 86400000));
+    const dailyRate = totalSpent / daysGone;
+    const projectedSpend = dailyRate * totalDays;
+    const projectedOvershoot = projectedSpend - setup.salary;
+    return { projectedSpend, projectedOvershoot, daysGone };
+  }, [cycleStart, cycleEnd, totalSpent, setup.salary]);
+
+  const trendData = useMemo(() => {
+    const prevTotal = prevCycleExpenses.reduce((a, e) => a + Number(e.amount), 0);
+    const csDate = new Date(cycleStart);
+    const nowDate = new Date();
+    const daysGone = Math.max(1, Math.ceil((nowDate - csDate) / 86400000));
+    const prevDays = 30;
+    const currDailyAvg = totalSpent / daysGone;
+    const prevDailyAvg = prevTotal / prevDays;
+    if (prevDailyAvg === 0) return { arrow: "→", color: T.muted, pctChange: 0 };
+    const pctChange = ((currDailyAvg - prevDailyAvg) / prevDailyAvg * 100).toFixed(0);
+    if (pctChange > 5) return { arrow: "↑", color: "#ef4444", pctChange };
+    if (pctChange < -5) return { arrow: "↓", color: "#10b981", pctChange: Math.abs(pctChange) };
+    return { arrow: "→", color: T.muted, pctChange: 0 };
+  }, [prevCycleExpenses, totalSpent, cycleStart, T.muted]);
+
+  const badges = useMemo(() => {
+    const catUnderBudget = allCats.filter(c => budgets[c.id] > 0 && (spentByCat[c.id] || 0) < budgets[c.id]).length;
+    const goalComplete = goals.some(g => g.target > 0 && g.saved >= g.target);
+    const defs = [
+      { icon: "🔥", label: "3-Day Streak", earned: noSpendStreak >= 3 },
+      { icon: "⚡", label: "Week Warrior", earned: noSpendStreak >= 7 },
+      { icon: "🏆", label: "Month Master", earned: noSpendStreak >= 30 },
+      { icon: "🎯", label: "Budget Hero", earned: catUnderBudget >= 3 },
+      { icon: "🌟", label: "Goal Crusher", earned: goalComplete },
+      { icon: "📋", label: "Diligent", earned: cycleExpenses.length >= 20 },
+      { icon: "💰", label: "Super Saver", earned: remaining > setup.salary * 0.4 },
+      { icon: "🚫", label: "No EMI Hero", earned: emis.length === 0 },
+    ];
+    return defs;
+  }, [noSpendStreak, budgets, spentByCat, allCats, goals, cycleExpenses.length, remaining, setup.salary, emis.length]);
+
+  const exceededCats = useMemo(() => {
+    return allCats.filter(c => {
+      const bud = budgets[c.id] || 0;
+      const spent = spentByCat[c.id] || 0;
+      return bud > 0 && spent > bud && !dismissedAlerts.has(c.id);
+    });
+  }, [allCats, budgets, spentByCat, dismissedAlerts]);
 
   const topCats = useMemo(() =>
     Object.entries(spentByCat)
@@ -394,7 +529,13 @@ function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, n
 
   return (
     <div className="fade-in">
-      {/* Header */}
+      {exceededCats.map(cat => (
+        <div key={cat.id} style={{ background: "#ef4444", color: "#fff", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>🔴 {cat.emoji} {cat.label} budget exceeded! Spent {fmt(spentByCat[cat.id])} of {fmt(budgets[cat.id])}</span>
+          <button onClick={() => setDismissedAlerts(prev => new Set([...prev, cat.id]))} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 16 }}>✕</button>
+        </div>
+      ))}
+
       <div style={{ position: "relative", overflow: "hidden", padding: "48px 20px 32px", background: "linear-gradient(135deg, #0a0f1e 0%, #111827 100%)" }}>
         <div className="blob1" style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, borderRadius: "50%", background: "#10b98133", filter: "blur(60px)" }} />
         <div className="blob2" style={{ position: "absolute", top: 20, right: -40, width: 180, height: 180, borderRadius: "50%", background: "#6366f133", filter: "blur(60px)" }} />
@@ -418,7 +559,6 @@ function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, n
             </div>
           ))}
         </div>
-        {/* Progress bar */}
         <div style={{ position: "relative", zIndex: 1, marginTop: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: "#94a3b8", fontSize: 12 }}>
             <span>Budget used</span><span>{pct.toFixed(0)}%</span>
@@ -430,29 +570,76 @@ function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, n
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
-        {/* Daily insight */}
+        <div style={{ background: personality.color + "20", border: `1px solid ${personality.color}40`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ background: personality.color + "33", color: personality.color, padding: "4px 10px", borderRadius: 20, fontWeight: 700, fontSize: 13 }}>{personality.label}</span>
+          <span style={{ color: T.text, fontSize: 13 }}>{personality.msg}</span>
+        </div>
+
+        {forecast.projectedSpend <= setup.salary * 0.8 && (
+          <div style={{ background: "#10b98120", border: "1px solid #10b98140", borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>✅</span>
+            <span style={{ color: T.text, fontSize: 14 }}>On track! Projected to spend <strong style={{ color: "#10b981" }}>{fmt(Math.round(forecast.projectedSpend))}</strong> this cycle — {fmt(Math.round(setup.salary - forecast.projectedSpend))} under budget.</span>
+          </div>
+        )}
+        {forecast.projectedSpend > setup.salary * 0.8 && forecast.projectedSpend <= setup.salary && (
+          <div style={{ background: "#f59e0b20", border: "1px solid #f59e0b40", borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>⚠️</span>
+            <span style={{ color: T.text, fontSize: 14 }}>Heads up! Projected to spend <strong style={{ color: "#f59e0b" }}>{fmt(Math.round(forecast.projectedSpend))}</strong> this cycle — cutting it close.</span>
+          </div>
+        )}
+        {forecast.projectedSpend > setup.salary && (
+          <div style={{ background: "#ef444420", border: "1px solid #ef444440", borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🚨</span>
+            <span style={{ color: T.text, fontSize: 14 }}>Overspend Alert! At this pace you'll spend <strong style={{ color: "#ef4444" }}>{fmt(Math.round(forecast.projectedSpend))}</strong> — {fmt(Math.round(forecast.projectedOvershoot))} OVER your salary.</span>
+          </div>
+        )}
+
         <div style={{ background: `${T.accent}15`, border: `1px solid ${T.accent}30`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 20 }}>💡</span>
           <span style={{ color: T.text, fontSize: 14, fontWeight: 500 }}>You can spend <strong style={{ color: T.accent }}>{fmt(Math.floor(dailyBudget))}/day</strong> for the rest of this cycle</span>
         </div>
 
-        {/* Stat tiles */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-          {[
-            { icon: "💸", label: "Total Spent",   val: fmt(totalSpent) },
-            { icon: "🏦", label: "Remaining",      val: fmt(Math.max(0, remaining)) },
-            { icon: "📅", label: "Daily Budget",   val: fmt(Math.floor(dailyBudget)) },
-            { icon: "🔥", label: "No-Spend Streak", val: `${noSpendStreak} day${noSpendStreak !== 1 ? "s" : ""}` },
-          ].map(s => (
-            <Card key={s.label} T={T} style={{ padding: "14px 16px" }}>
-              <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
-              <div style={{ color: T.muted, fontSize: 11, marginBottom: 2 }}>{s.label}</div>
-              <div style={{ color: T.text, fontSize: 18, fontWeight: 700 }}>{s.val}</div>
-            </Card>
-          ))}
+        {cycleExpenses.length === 0 ? (
+          <Card T={T} style={{ marginBottom: 16, textAlign: "center", padding: 32 }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>💸</div>
+            <div style={{ fontWeight: 700, color: T.text, fontSize: 18, marginBottom: 8 }}>No expenses yet</div>
+            <div style={{ color: T.muted, fontSize: 14, marginBottom: 16 }}>Tap the + button below to add your first expense</div>
+            <div className="bounce-arrow" style={{ fontSize: 24, color: T.accent }}>↓</div>
+          </Card>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              {[
+                { icon: "💸", label: "Total Spent",   val: fmt(totalSpent) },
+                { icon: "🏦", label: "Remaining",      val: fmt(Math.max(0, remaining)) },
+                { icon: "📅", label: "Daily Budget",   val: fmt(Math.floor(dailyBudget)) },
+                { icon: "🔥", label: "No-Spend Streak", val: `${noSpendStreak} day${noSpendStreak !== 1 ? "s" : ""}` },
+              ].map(s => (
+                <Card key={s.label} T={T} style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
+                  <div style={{ color: T.muted, fontSize: 11, marginBottom: 2 }}>{s.label}</div>
+                  <div style={{ color: T.text, fontSize: 18, fontWeight: 700 }}>{s.val}</div>
+                  {s.label === "Total Spent" && trendData.arrow !== "→" && (
+                    <div style={{ color: trendData.color, fontSize: 10, marginTop: 2 }}>{trendData.arrow} {trendData.pctChange}% vs last cycle</div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10, color: T.text }}>🏅 Badges</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }} className="hide-scroll">
+            {badges.map((b, i) => (
+              <div key={i} className={b.earned ? "badge-glow" : ""} style={{ minWidth: 64, padding: "10px 8px", borderRadius: 12, background: T.card, border: `1px solid ${T.border}`, textAlign: "center", opacity: b.earned ? 1 : 0.3, "--glow-color": T.accent }}>
+                <div style={{ fontSize: 24 }}>{b.icon}</div>
+                <div style={{ fontSize: 9, color: T.muted, marginTop: 4, fontWeight: 600 }}>{b.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Top categories */}
         {topCats.length > 0 && (
           <Card T={T} style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, color: T.text }}>Top Spending</div>
@@ -479,7 +666,6 @@ function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, n
           </Card>
         )}
 
-        {/* EMI + Sub burn */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <Card T={T} style={{ padding: "14px 16px" }}>
             <div style={{ fontSize: 14, marginBottom: 4 }}>🏦</div>
@@ -499,8 +685,7 @@ function HomeTab({ T, setup, totalSpent, remaining, daysLeft, paydayCountdown, n
   );
 }
 
-// ─── ADD EXPENSE MODAL ────────────────────────────────────────────────────────
-function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, customCats, setCustomCats }) {
+function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, customCats, setCustomCats, fmt }) {
   const [amount, setAmount]     = useState("");
   const [cat,    setCat]        = useState(allCats[0].id);
   const [date,   setDate]       = useState(today());
@@ -512,6 +697,8 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatEmoji, setNewCatEmoji] = useState("🎁");
+  const [nlInput, setNlInput] = useState("");
+  const [nlParsed, setNlParsed] = useState(null);
 
   const selCat = allCats.find(c => c.id === cat) || allCats[0];
   const spent  = spentByCat[cat] || 0;
@@ -520,19 +707,45 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
   const barPct = bud > 0 ? Math.min(100, (afterAmt / bud) * 100) : 0;
   const barColor = barPct > 100 ? "#ef4444" : barPct > 70 ? "#f59e0b" : "#10b981";
 
+  const parseNL = (input) => {
+    if (!input.trim()) { setNlParsed(null); return; }
+    const lowerInput = input.toLowerCase();
+    const amountMatch = input.match(/(\d+)/);
+    const parsedAmount = amountMatch ? amountMatch[1] : "";
+    let parsedCat = "others";
+    for (const [pattern, catId] of Object.entries(NL_CATEGORIES)) {
+      const regex = new RegExp(pattern, "i");
+      if (regex.test(lowerInput)) {
+        parsedCat = catId;
+        break;
+      }
+    }
+    const noteText = input.replace(/\d+/g, "").trim();
+    if (parsedAmount) {
+      setAmount(parsedAmount);
+      setCat(parsedCat);
+      setNote(noteText);
+      const catObj = allCats.find(c => c.id === parsedCat);
+      setNlParsed({ amount: parsedAmount, catLabel: catObj?.label || parsedCat });
+    }
+  };
+
   const doAdd = () => {
     if (!amount || Number(amount) <= 0) return;
     onAdd({ amount: Number(amount), category: cat, date, method, note, recurring, othersLabel: cat === "others" ? othersLabel : "" });
     setSuccess({ amount, cat: selCat.label });
+    setTimeout(() => setSuccess(null), 2500);
     setAmount("");
     setNote("");
     setOthersLabel("");
     setRecurring(false);
+    setNlInput("");
+    setNlParsed(null);
   };
 
   const doAddCustomCat = () => {
     if (!newCatName.trim()) return;
-    const id = "custom_" + Date.now();
+    const id = "custom_" + crypto.randomUUID();
     const nc = { id, label: newCatName.trim(), emoji: newCatEmoji, color: "#" + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,"0"), custom: true };
     setCustomCats(prev => [...prev, nc]);
     setNewCatName(""); setShowNewCat(false); setCat(id);
@@ -542,14 +755,21 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
     <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
       <div className="slide-up" style={{ position: "relative", background: T.bg3 === "#ffffff" ? "#fff" : "#111827", borderRadius: "24px 24px 0 0", padding: "20px 20px 40px", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.border}` }} >
-        {/* Handle */}
         <div style={{ width: 40, height: 4, background: T.border, borderRadius: 2, margin: "0 auto 16px" }} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 18, color: T.text }}>Add Expense</div>
           <button onClick={onClose} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", color: T.muted, fontSize: 14 }}>✕ Close</button>
         </div>
 
-        {/* Live budget bar */}
+        <div style={{ marginBottom: 16 }}>
+          <Label T={T}>Quick add (e.g. 'swiggy 340' or 'rent 12000')</Label>
+          <input type="text" placeholder="Type expense in plain English..." value={nlInput} onChange={e => { setNlInput(e.target.value); parseNL(e.target.value); }}
+            style={{ ...inputStyle(T), width: "100%" }} />
+          {nlParsed && (
+            <div style={{ marginTop: 6, color: "#10b981", fontSize: 13, fontWeight: 600 }}>✓ Parsed: {fmt(nlParsed.amount)} in {nlParsed.catLabel}</div>
+          )}
+        </div>
+
         {bud > 0 && (
           <div style={{ background: barColor + "15", border: `1px solid ${barColor}30`, borderRadius: 12, padding: "10px 14px", marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.text, marginBottom: 6 }}>
@@ -562,15 +782,13 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           </div>
         )}
 
-        {/* Success toast */}
         {success && (
-          <div style={{ background: "#10b98120", border: "1px solid #10b98140", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="fade-in" style={{ background: "#10b98120", border: "1px solid #10b98140", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 20 }}>✅</span>
             <span style={{ color: "#10b981", fontWeight: 600 }}>Expense Added! {fmt(success.amount)} in {success.cat}</span>
           </div>
         )}
 
-        {/* Amount */}
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ color: T.muted, fontSize: 13, marginBottom: 6 }}>Amount</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
@@ -581,7 +799,6 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           <div style={{ height: 2, background: T.accent, maxWidth: 200, margin: "0 auto", borderRadius: 2 }} />
         </div>
 
-        {/* Category grid */}
         <Label T={T}>Category</Label>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
           {allCats.map(c => (
@@ -598,7 +815,6 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           </button>
         </div>
 
-        {/* Others label */}
         {cat === "others" && (
           <div style={{ marginBottom: 12 }}>
             <Label T={T}>What is this expense?</Label>
@@ -607,7 +823,6 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           </div>
         )}
 
-        {/* New category form */}
         {showNewCat && (
           <Card T={T} style={{ marginBottom: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 10, color: T.text }}>New Category</div>
@@ -625,7 +840,6 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           </Card>
         )}
 
-        {/* Date */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div>
             <Label T={T}>Date</Label>
@@ -644,12 +858,10 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
           </div>
         </div>
 
-        {/* Note */}
         <Label T={T}>Note (optional)</Label>
         <input type="text" placeholder="Add a note..." value={note} onChange={e => setNote(e.target.value)}
           style={{ ...inputStyle(T), width: "100%", marginBottom: 12 }} />
 
-        {/* Recurring toggle */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <span style={{ color: T.text, fontSize: 14 }}>🔄 Recurring monthly</span>
           <Toggle on={recurring} onToggle={() => setRecurring(p => !p)} T={T} />
@@ -661,12 +873,10 @@ function AddExpenseModal({ T, allCats, budgets, spentByCat, onAdd, onClose, cust
   );
 }
 
-// ─── EXPENSES TAB ─────────────────────────────────────────────────────────────
-function ExpensesTab({ T, expenses, allCats, onDelete, onEdit }) {
+function ExpensesTab({ T, expenses, allCats, onDelete, onEdit, fmt, confirmDelete, handleDeleteWithConfirm }) {
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
   const [filterMethod, setFilterMethod] = useState("all");
-  const [editId, setEditId] = useState(null);
 
   const filtered = useMemo(() =>
     expenses.filter(e => {
@@ -741,6 +951,7 @@ function ExpensesTab({ T, expenses, allCats, onDelete, onEdit }) {
           </div>
           {exps.map(e => {
             const cat = allCats.find(c => c.id === e.category) || CATS.find(c=>c.id==="others");
+            const isConfirming = confirmDelete === e.id;
             return (
               <Card key={e.id} T={T} style={{ marginBottom: 8, padding: "12px 14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -755,7 +966,9 @@ function ExpensesTab({ T, expenses, allCats, onDelete, onEdit }) {
                     <div style={{ textAlign: "right" }}>
                       <div style={{ color: T.text, fontWeight: 700, fontSize: 15 }}>{fmt(e.amount)}</div>
                     </div>
-                    <button onClick={() => onDelete(e.id)} style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontSize: 14 }}>🗑</button>
+                    <button onClick={(ev) => handleDeleteWithConfirm(e.id, onDelete, ev)} style={{ background: isConfirming ? "#ef4444" : "#ef444420", border: `1px solid ${isConfirming ? "#ef4444" : "#ef444440"}`, color: isConfirming ? "#fff" : "#ef4444", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontSize: isConfirming ? 11 : 14, fontWeight: isConfirming ? 600 : 400, minWidth: isConfirming ? 60 : "auto" }}>
+                      {isConfirming ? "Sure? ✓" : "🗑"}
+                    </button>
                   </div>
                 </div>
               </Card>
@@ -767,8 +980,7 @@ function ExpensesTab({ T, expenses, allCats, onDelete, onEdit }) {
   );
 }
 
-// ─── BUDGET TAB ───────────────────────────────────────────────────────────────
-function BudgetTab({ T, budgets, setBudgets, allCats, spentByCat, salary }) {
+function BudgetTab({ T, budgets, setBudgets, allCats, spentByCat, salary, fmt }) {
   const total = Object.values(budgets).reduce((a,b) => a + Number(b||0), 0);
   const pct = salary ? (total / salary * 100).toFixed(0) : 0;
 
@@ -837,8 +1049,7 @@ function BudgetTab({ T, budgets, setBudgets, allCats, spentByCat, salary }) {
   );
 }
 
-// ─── GOALS TAB ────────────────────────────────────────────────────────────────
-function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary }) {
+function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary, fmt, confirmDelete, handleDeleteWithConfirm }) {
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showAddWish, setShowAddWish] = useState(false);
   const [gForm, setGForm] = useState({ name: "", target: "", saved: "", monthly: "", emoji: "🎯" });
@@ -846,21 +1057,24 @@ function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary }) {
 
   const addGoal = () => {
     if (!gForm.name || !gForm.target) return;
-    setGoals(prev => [...prev, { ...gForm, id: Date.now(), target: Number(gForm.target), saved: Number(gForm.saved||0), monthly: Number(gForm.monthly||0) }]);
+    setGoals(prev => [...prev, { ...gForm, id: crypto.randomUUID(), target: Number(gForm.target), saved: Number(gForm.saved||0), monthly: Number(gForm.monthly||0) }]);
     setGForm({ name: "", target: "", saved: "", monthly: "", emoji: "🎯" });
     setShowAddGoal(false);
   };
 
   const addEmergencyFund = () => {
-    setGoals(prev => [...prev, { id: Date.now(), name: "Emergency Fund", emoji: "🛡️", target: salary * 6, saved: 0, monthly: Math.round(salary * 0.1) }]);
+    setGoals(prev => [...prev, { id: crypto.randomUUID(), name: "Emergency Fund", emoji: "🛡️", target: salary * 6, saved: 0, monthly: Math.round(salary * 0.1) }]);
   };
 
   const addWish = () => {
     if (!wForm.name) return;
-    setWishlist(prev => [...prev, { ...wForm, id: Date.now(), price: Number(wForm.price||0) }]);
+    setWishlist(prev => [...prev, { ...wForm, id: crypto.randomUUID(), price: Number(wForm.price||0) }]);
     setWForm({ name: "", price: "" });
     setShowAddWish(false);
   };
+
+  const deleteGoal = (id) => setGoals(prev => prev.filter(x => x.id !== id));
+  const deleteWish = (id) => setWishlist(prev => prev.filter(x => x.id !== id));
 
   return (
     <div className="fade-in" style={{ padding: 16 }}>
@@ -888,6 +1102,7 @@ function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary }) {
       {goals.map(g => {
         const pct = g.target > 0 ? Math.min(100, g.saved / g.target * 100) : 0;
         const monthsLeft = g.monthly > 0 ? Math.ceil((g.target - g.saved) / g.monthly) : null;
+        const isConfirming = confirmDelete === g.id;
         return (
           <Card key={g.id} T={T} style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -899,7 +1114,9 @@ function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary }) {
                   {monthsLeft && <div style={{ color: T.accent, fontSize: 12 }}>{monthsLeft} months to go</div>}
                 </div>
               </div>
-              <button onClick={() => setGoals(prev => prev.filter(x => x.id !== g.id))} style={{ color: "#ef4444", background: "transparent", border: "none", cursor: "pointer", fontSize: 16 }}>🗑</button>
+              <button onClick={(ev) => handleDeleteWithConfirm(g.id, deleteGoal, ev)} style={{ color: isConfirming ? "#fff" : "#ef4444", background: isConfirming ? "#ef4444" : "transparent", border: isConfirming ? "1px solid #ef4444" : "none", cursor: "pointer", fontSize: isConfirming ? 11 : 16, borderRadius: 6, padding: isConfirming ? "4px 8px" : 0, fontWeight: isConfirming ? 600 : 400 }}>
+                {isConfirming ? "Sure? ✓" : "🗑"}
+              </button>
             </div>
             <div style={{ height: 8, borderRadius: 8, background: T.border, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg, ${T.accent}, ${T.accent2})`, borderRadius: 8 }} />
@@ -923,22 +1140,27 @@ function GoalsTab({ T, goals, setGoals, wishlist, setWishlist, salary }) {
             <Btn T={T} onClick={addWish} style={{ width: "100%" }}>Add to Wishlist</Btn>
           </Card>
         )}
-        {wishlist.map(w => (
-          <Card key={w.id} T={T} style={{ marginBottom: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ color: T.text, fontWeight: 600 }}>{w.name}</div>
-              {w.price > 0 && <div style={{ color: T.muted, fontSize: 12 }}>{fmt(w.price)}</div>}
-            </div>
-            <button onClick={() => setWishlist(prev => prev.filter(x => x.id !== w.id))} style={{ color: "#ef4444", background: "transparent", border: "none", cursor: "pointer", fontSize: 16 }}>🗑</button>
-          </Card>
-        ))}
+        {wishlist.map(w => {
+          const isConfirming = confirmDelete === w.id;
+          return (
+            <Card key={w.id} T={T} style={{ marginBottom: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ color: T.text, fontWeight: 600 }}>{w.name}</div>
+                {w.price > 0 && <div style={{ color: T.muted, fontSize: 12 }}>{fmt(w.price)}</div>}
+              </div>
+              <button onClick={(ev) => handleDeleteWithConfirm(w.id, deleteWish, ev)} style={{ color: isConfirming ? "#fff" : "#ef4444", background: isConfirming ? "#ef4444" : "transparent", border: isConfirming ? "1px solid #ef4444" : "none", cursor: "pointer", fontSize: isConfirming ? 11 : 16, borderRadius: 6, padding: isConfirming ? "4px 8px" : 0, fontWeight: isConfirming ? 600 : 400 }}>
+                {isConfirming ? "Sure? ✓" : "🗑"}
+              </button>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ─── REPORTS TAB ──────────────────────────────────────────────────────────────
-function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary }) {
+function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary, fmt, subs, emis, remaining, noSpendStreak }) {
+  const [shareToast, setShareToast] = useState(null);
   const PIE_COLORS = allCats.map(c => c.color);
 
   const pieData = useMemo(() =>
@@ -959,7 +1181,6 @@ function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary })
     return months;
   }, [expenses]);
 
-  // Calendar heatmap
   const heatData = useMemo(() => {
     const now = new Date();
     const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -978,11 +1199,99 @@ function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary })
   const totalSpent = cycleExpenses.reduce((a, e) => a + Number(e.amount), 0);
   const saved = salary - totalSpent;
 
+  const smartInsights = useMemo(() => {
+    const insights = [];
+    const byDate = {};
+    cycleExpenses.forEach(e => { byDate[e.date] = (byDate[e.date] || 0) + Number(e.amount); });
+    const dates = Object.entries(byDate).sort((a,b) => b[1] - a[1]);
+    if (dates.length > 0) {
+      insights.push({ icon: "📅", text: `Biggest day: ${new Date(dates[0][0]).toLocaleDateString("en-IN", {day:"numeric",month:"short"})} — ${fmt(dates[0][1])}` });
+    }
+    const cashTotal = cycleExpenses.filter(e => e.method === "cash").reduce((a,e) => a + Number(e.amount), 0);
+    const cashPct = totalSpent > 0 ? (cashTotal / totalSpent * 100).toFixed(0) : 0;
+    if (cashPct > 50) {
+      insights.push({ icon: "💵", text: `${cashPct}% cash spending — consider going digital for better tracking` });
+    } else if (totalSpent > 0) {
+      insights.push({ icon: "💳", text: `${100 - cashPct}% digital — great tracking discipline!` });
+    }
+    const unusedSubs = subs.filter(s => s.unused);
+    if (unusedSubs.length > 0) {
+      const unusedCost = unusedSubs.reduce((a,s) => a + (s.cycle === "annual" ? s.amount/12 : Number(s.amount)), 0);
+      insights.push({ icon: "📱", text: `Wasting ${fmt(Math.round(unusedCost))}/month on ${unusedSubs.length} unused subscription(s)` });
+    }
+    const emiTotal = emis.reduce((a,e) => a + Number(e.monthly || 0), 0);
+    const emiPct = salary > 0 ? (emiTotal / salary * 100).toFixed(0) : 0;
+    if (emiPct > 40) {
+      insights.push({ icon: "🏦", text: `EMI burden at ${emiPct}% — financial experts recommend keeping this under 40%` });
+    } else if (emiPct > 0) {
+      insights.push({ icon: "🏦", text: `EMI burden at ${emiPct}% — healthy range!` });
+    }
+    const savingsRate = salary > 0 ? (Math.max(0, remaining) / salary * 100).toFixed(0) : 0;
+    if (savingsRate >= 20) {
+      insights.push({ icon: "🌟", text: `Saving ${savingsRate}% of salary — excellent!` });
+    } else if (savingsRate >= 10) {
+      insights.push({ icon: "💰", text: `Saving ${savingsRate}% — try to reach 20%` });
+    } else if (salary > 0) {
+      insights.push({ icon: "⚠️", text: `Only saving ${savingsRate}% — consider cutting discretionary spending` });
+    }
+    const catCounts = {};
+    cycleExpenses.forEach(e => { catCounts[e.category] = (catCounts[e.category] || 0) + 1; });
+    const topCatByCount = Object.entries(catCounts).sort((a,b) => b[1] - a[1])[0];
+    if (topCatByCount) {
+      const cat = allCats.find(c => c.id === topCatByCount[0]);
+      if (cat) {
+        insights.push({ icon: "🔁", text: `Most frequent: ${cat.emoji} ${cat.label} (${topCatByCount[1]} transactions)` });
+      }
+    }
+    return insights;
+  }, [cycleExpenses, totalSpent, subs, emis, salary, remaining, allCats, fmt]);
+
+  const handleShare = async () => {
+    const now = new Date();
+    const monthName = now.toLocaleString("en-IN", { month: "long" });
+    const year = now.getFullYear();
+    const savingsRate = salary > 0 ? (Math.max(0, remaining) / salary * 100).toFixed(0) : 0;
+    const sortedPie = [...pieData].sort((a,b) => b.value - a.value);
+    const topCat = sortedPie[0]?.name || "–";
+    const text = `─────────────────────────
+📊 ${monthName} ${year} Report
+💰 Salary: ${fmt(salary)}
+💸 Spent: ${fmt(totalSpent)}
+🏦 Saved: ${fmt(Math.max(0, remaining))} (${savingsRate}%)
+📋 Transactions: ${cycleExpenses.length}
+🔥 No-Spend Streak: ${noSpendStreak} days
+🏆 Top Category: ${topCat}
+─────────────────────────
+Tracked with Salary Tracker App
+─────────────────────────`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        setShareToast("Report shared! 🎉");
+      } else {
+        await navigator.clipboard.writeText(text);
+        setShareToast("Report copied to clipboard! 📋");
+      }
+      setTimeout(() => setShareToast(null), 2500);
+    } catch (err) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setShareToast("Report copied to clipboard! 📋");
+        setTimeout(() => setShareToast(null), 2500);
+      } catch {}
+    }
+  };
+
   return (
     <div className="fade-in" style={{ padding: 16 }}>
-      <div style={{ fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 16, paddingTop: 8 }}>📈 Reports</div>
+      {shareToast && (
+        <div className="fade-in" style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: "#10b981", color: "#fff", padding: "10px 20px", borderRadius: 12, fontWeight: 600, zIndex: 200 }}>{shareToast}</div>
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingTop: 8 }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>📈 Reports</div>
+        <button onClick={handleShare} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", color: T.accent, fontSize: 12, fontWeight: 600 }}>Share 📤</button>
+      </div>
 
-      {/* Pie chart */}
       {pieData.length > 0 && (
         <Card T={T} style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, color: T.text, marginBottom: 12 }}>Spending by Category</div>
@@ -1005,7 +1314,6 @@ function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary })
         </Card>
       )}
 
-      {/* Bar chart */}
       <Card T={T} style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, color: T.text, marginBottom: 12 }}>Last 6 Months</div>
         <ResponsiveContainer width="100%" height={180}>
@@ -1019,7 +1327,6 @@ function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary })
         </ResponsiveContainer>
       </Card>
 
-      {/* Heatmap */}
       <Card T={T} style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, color: T.text, marginBottom: 12 }}>Spending Heatmap — This Month</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -1032,27 +1339,23 @@ function ReportsTab({ T, expenses, cycleExpenses, allCats, spentByCat, salary })
         </div>
       </Card>
 
-      {/* Insight cards */}
       <Card T={T} style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, color: T.text, marginBottom: 12 }}>💡 Insights</div>
-        {[
-          { text: `You've saved ${fmt(Math.max(0, saved))} this cycle`, icon: "💰" },
-          { text: `Total transactions: ${cycleExpenses.length}`, icon: "📋" },
-          { text: `Average expense: ${fmt(cycleExpenses.length ? Math.round(totalSpent / cycleExpenses.length) : 0)}`, icon: "📊" },
-          { text: `Biggest category: ${pieData.sort((a,b)=>b.value-a.value)[0]?.name || "–"}`, icon: "🏆" },
-        ].map((ins, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderBottom: i < 3 ? `1px solid ${T.border}` : "none" }}>
+        {smartInsights.map((ins, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderBottom: i < smartInsights.length - 1 ? `1px solid ${T.border}` : "none" }}>
             <span style={{ fontSize: 18 }}>{ins.icon}</span>
             <span style={{ color: T.text, fontSize: 14 }}>{ins.text}</span>
           </div>
         ))}
+        {smartInsights.length === 0 && (
+          <div style={{ color: T.muted, textAlign: "center", padding: 16 }}>Add some expenses to see insights</div>
+        )}
       </Card>
     </div>
   );
 }
 
-// ─── MORE TAB ─────────────────────────────────────────────────────────────────
-function MoreTab({ T, moreTab, setMoreTab, emis, setEmis, subs, setSubs, splits, setSplits, salary }) {
+function MoreTab({ T, moreTab, setMoreTab, emis, setEmis, subs, setSubs, splits, setSplits, salary, fmt, confirmDelete, handleDeleteWithConfirm }) {
   return (
     <div className="fade-in" style={{ padding: 16 }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 16, paddingTop: 8 }}>⚙️ More</div>
@@ -1064,24 +1367,25 @@ function MoreTab({ T, moreTab, setMoreTab, emis, setEmis, subs, setSubs, splits,
           </button>
         ))}
       </div>
-      {moreTab === "emi" && <EMITab T={T} emis={emis} setEmis={setEmis} salary={salary} />}
-      {moreTab === "subs" && <SubsTab T={T} subs={subs} setSubs={setSubs} />}
-      {moreTab === "splits" && <SplitsTab T={T} splits={splits} setSplits={setSplits} />}
+      {moreTab === "emi" && <EMITab T={T} emis={emis} setEmis={setEmis} salary={salary} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
+      {moreTab === "subs" && <SubsTab T={T} subs={subs} setSubs={setSubs} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
+      {moreTab === "splits" && <SplitsTab T={T} splits={splits} setSplits={setSplits} fmt={fmt} confirmDelete={confirmDelete} handleDeleteWithConfirm={handleDeleteWithConfirm} />}
     </div>
   );
 }
 
-function EMITab({ T, emis, setEmis, salary }) {
+function EMITab({ T, emis, setEmis, salary, fmt, confirmDelete, handleDeleteWithConfirm }) {
   const [form, setForm] = useState({ name: "", total: "", monthly: "", rate: "", startDate: today(), tenure: "" });
   const [show, setShow] = useState(false);
   const totalEMI = emis.reduce((a, e) => a + Number(e.monthly||0), 0);
   const emiPct = salary ? (totalEMI / salary * 100).toFixed(1) : 0;
   const add = () => {
     if (!form.name || !form.monthly) return;
-    setEmis(prev => [...prev, { ...form, id: Date.now(), monthly: Number(form.monthly), total: Number(form.total||0), tenure: Number(form.tenure||0) }]);
+    setEmis(prev => [...prev, { ...form, id: crypto.randomUUID(), monthly: Number(form.monthly), total: Number(form.total||0), tenure: Number(form.tenure||0) }]);
     setForm({ name: "", total: "", monthly: "", rate: "", startDate: today(), tenure: "" });
     setShow(false);
   };
+  const deleteEmi = (id) => setEmis(prev => prev.filter(x => x.id !== id));
   return (
     <div>
       <Card T={T} style={{ marginBottom: 16 }}>
@@ -1107,6 +1411,7 @@ function EMITab({ T, emis, setEmis, salary }) {
         const start = new Date(e.startDate);
         const end = new Date(start); end.setMonth(end.getMonth() + e.tenure);
         const monthsLeft = Math.max(0, Math.ceil((end - new Date()) / 2592000000));
+        const isConfirming = confirmDelete === e.id;
         return (
           <Card key={e.id} T={T} style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -1115,7 +1420,9 @@ function EMITab({ T, emis, setEmis, salary }) {
                 <div style={{ color: T.muted, fontSize: 12 }}>{fmt(e.monthly)}/month · {monthsLeft} months left</div>
                 {e.rate && <div style={{ color: T.muted, fontSize: 12 }}>{e.rate}% interest · Total: {fmt(e.total)}</div>}
               </div>
-              <button onClick={() => setEmis(prev => prev.filter(x => x.id !== e.id))} style={{ color: "#ef4444", background: "transparent", border: "none", cursor: "pointer" }}>🗑</button>
+              <button onClick={(ev) => handleDeleteWithConfirm(e.id, deleteEmi, ev)} style={{ color: isConfirming ? "#fff" : "#ef4444", background: isConfirming ? "#ef4444" : "transparent", border: isConfirming ? "1px solid #ef4444" : "none", cursor: "pointer", fontSize: isConfirming ? 11 : 16, borderRadius: 6, padding: isConfirming ? "4px 8px" : 0, fontWeight: isConfirming ? 600 : 400 }}>
+                {isConfirming ? "Sure? ✓" : "🗑"}
+              </button>
             </div>
           </Card>
         );
@@ -1124,13 +1431,13 @@ function EMITab({ T, emis, setEmis, salary }) {
   );
 }
 
-function SubsTab({ T, subs, setSubs }) {
+function SubsTab({ T, subs, setSubs, fmt, confirmDelete, handleDeleteWithConfirm }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ name: "", amount: "", cycle: "monthly", renewal: today(), unused: false });
   const totalMonthly = subs.reduce((a, s) => a + (s.cycle === "annual" ? s.amount/12 : Number(s.amount||0)), 0);
   const add = () => {
     if (!form.name || !form.amount) return;
-    setSubs(prev => [...prev, { ...form, id: Date.now(), amount: Number(form.amount) }]);
+    setSubs(prev => [...prev, { ...form, id: crypto.randomUUID(), amount: Number(form.amount) }]);
     setForm({ name: "", amount: "", cycle: "monthly", renewal: today(), unused: false });
     setShow(false);
   };
@@ -1138,6 +1445,7 @@ function SubsTab({ T, subs, setSubs }) {
     const diff = (new Date(d) - new Date()) / 86400000;
     return diff >= 0 && diff <= 7;
   };
+  const deleteSub = (id) => setSubs(prev => prev.filter(x => x.id !== id));
   return (
     <div>
       <Card T={T} style={{ marginBottom: 16 }}>
@@ -1161,37 +1469,43 @@ function SubsTab({ T, subs, setSubs }) {
           <Btn T={T} onClick={add} style={{ width: "100%" }}>Add Subscription</Btn>
         </Card>
       )}
-      {subs.map(s => (
-        <Card key={s.id} T={T} style={{ marginBottom: 10, opacity: s.unused ? 0.5 : 1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontWeight: 700, color: T.text, textDecoration: s.unused ? "line-through" : "none" }}>{s.name}</div>
-              <div style={{ color: T.muted, fontSize: 12 }}>{fmt(s.amount)}/{s.cycle} {s.cycle === "annual" ? `(${fmt(Math.round(s.amount/12))}/mo)` : ""}</div>
-              {renewalAlert(s.renewal) && <div style={{ color: "#f59e0b", fontSize: 12 }}>⚠️ Renews soon: {new Date(s.renewal).toLocaleDateString("en-IN")}</div>}
+      {subs.map(s => {
+        const isConfirming = confirmDelete === s.id;
+        return (
+          <Card key={s.id} T={T} style={{ marginBottom: 10, opacity: s.unused ? 0.5 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: T.text, textDecoration: s.unused ? "line-through" : "none" }}>{s.name}</div>
+                <div style={{ color: T.muted, fontSize: 12 }}>{fmt(s.amount)}/{s.cycle} {s.cycle === "annual" ? `(${fmt(Math.round(s.amount/12))}/mo)` : ""}</div>
+                {renewalAlert(s.renewal) && <div style={{ color: "#f59e0b", fontSize: 12 }}>⚠️ Renews soon: {new Date(s.renewal).toLocaleDateString("en-IN")}</div>}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={() => setSubs(prev => prev.map(x => x.id === s.id ? {...x,unused:!x.unused} : x))} style={{ color: T.muted, background: "transparent", border: "none", cursor: "pointer", fontSize: 12 }}>{s.unused ? "Activate" : "Unused"}</button>
+                <button onClick={(ev) => handleDeleteWithConfirm(s.id, deleteSub, ev)} style={{ color: isConfirming ? "#fff" : "#ef4444", background: isConfirming ? "#ef4444" : "transparent", border: isConfirming ? "1px solid #ef4444" : "none", cursor: "pointer", fontSize: isConfirming ? 11 : 16, borderRadius: 6, padding: isConfirming ? "4px 8px" : 0, fontWeight: isConfirming ? 600 : 400 }}>
+                  {isConfirming ? "Sure? ✓" : "🗑"}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={() => setSubs(prev => prev.map(x => x.id === s.id ? {...x,unused:!x.unused} : x))} style={{ color: T.muted, background: "transparent", border: "none", cursor: "pointer", fontSize: 12 }}>{s.unused ? "Activate" : "Unused"}</button>
-              <button onClick={() => setSubs(prev => prev.filter(x => x.id !== s.id))} style={{ color: "#ef4444", background: "transparent", border: "none", cursor: "pointer" }}>🗑</button>
-            </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-function SplitsTab({ T, splits, setSplits }) {
+function SplitsTab({ T, splits, setSplits, fmt, confirmDelete, handleDeleteWithConfirm }) {
   const [show, setShow] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
   const [form, setForm] = useState({ desc: "", person: "", amount: "", direction: "i_owe" });
   const add = () => {
     if (!form.desc || !form.amount || !form.person) return;
-    setSplits(prev => [...prev, { ...form, id: Date.now(), amount: Number(form.amount), settled: false }]);
+    setSplits(prev => [...prev, { ...form, id: crypto.randomUUID(), amount: Number(form.amount), settled: false }]);
     setForm({ desc: "", person: "", amount: "", direction: "i_owe" });
     setShow(false);
   };
   const unsettled = splits.filter(s => !s.settled);
   const settled   = splits.filter(s => s.settled);
+  const deleteSplit = (id) => setSplits(prev => prev.filter(x => x.id !== id));
   return (
     <div>
       <Btn T={T} onClick={() => setShow(p=>!p)} style={{ width: "100%", marginBottom: 12 }}>+ Add Split</Btn>
@@ -1211,21 +1525,26 @@ function SplitsTab({ T, splits, setSplits }) {
         </Card>
       )}
       {unsettled.length === 0 && <div style={{ textAlign: "center", color: T.muted, padding: 24 }}>No pending splits</div>}
-      {unsettled.map(s => (
-        <Card key={s.id} T={T} style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontWeight: 700, color: T.text }}>{s.desc}</div>
-              <div style={{ color: T.muted, fontSize: 12 }}>{s.direction === "i_owe" ? `You owe ${s.person}` : `${s.person} owes you`}</div>
-              <div style={{ color: s.direction === "i_owe" ? "#ef4444" : "#10b981", fontWeight: 700 }}>{fmt(s.amount)}</div>
+      {unsettled.map(s => {
+        const isConfirming = confirmDelete === s.id;
+        return (
+          <Card key={s.id} T={T} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: T.text }}>{s.desc}</div>
+                <div style={{ color: T.muted, fontSize: 12 }}>{s.direction === "i_owe" ? `You owe ${s.person}` : `${s.person} owes you`}</div>
+                <div style={{ color: s.direction === "i_owe" ? "#ef4444" : "#10b981", fontWeight: 700 }}>{fmt(s.amount)}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setSplits(prev => prev.map(x => x.id === s.id ? {...x,settled:true} : x))} style={{ background: "#10b98120", border: "1px solid #10b98140", color: "#10b981", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓ Settle</button>
+                <button onClick={(ev) => handleDeleteWithConfirm(s.id, deleteSplit, ev)} style={{ color: isConfirming ? "#fff" : "#ef4444", background: isConfirming ? "#ef4444" : "transparent", border: isConfirming ? "1px solid #ef4444" : "none", cursor: "pointer", fontSize: isConfirming ? 11 : 16, borderRadius: 6, padding: isConfirming ? "4px 8px" : 0, fontWeight: isConfirming ? 600 : 400 }}>
+                  {isConfirming ? "Sure? ✓" : "🗑"}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setSplits(prev => prev.map(x => x.id === s.id ? {...x,settled:true} : x))} style={{ background: "#10b98120", border: "1px solid #10b98140", color: "#10b981", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓ Settle</button>
-              <button onClick={() => setSplits(prev => prev.filter(x => x.id !== s.id))} style={{ color: "#ef4444", background: "transparent", border: "none", cursor: "pointer" }}>🗑</button>
-            </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
       {settled.length > 0 && (
         <button onClick={() => setShowSettled(p=>!p)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 13, marginTop: 8 }}>
           {showSettled ? "Hide" : "Show"} {settled.length} settled
@@ -1243,17 +1562,34 @@ function SplitsTab({ T, splits, setSplits }) {
   );
 }
 
-// ─── SETTINGS MODAL ───────────────────────────────────────────────────────────
-function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, expenses, setExpenses, budgets, goals, emis, subs, onClose, darkMode }) {
+function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, expenses, setExpenses, budgets, goals, emis, subs, onClose, darkMode, currency, setCurrency, fmt, setBudgets, setGoals, setEmis, setSubs, setSplits, splits, wishlist, setWishlist, setCustomCats }) {
   const [editSalary, setEditSalary] = useState(setup.salary);
   const [editDay,    setEditDay]    = useState(setup.creditDay);
+  const [currentPin, setCurrentPin] = useState("");
   const [newPin,     setNewPin]     = useState("");
-  const [confirm,    setConfirm]    = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [importConfirm, setImportConfirm] = useState(false);
+
+  useEffect(() => {
+    if (importConfirm) {
+      const timer = setTimeout(() => setImportConfirm(false), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [importConfirm]);
 
   const exportJSON = () => {
-    const data = { setup, expenses, budgets, goals, emis, subs };
+    const data = { setup, expenses, budgets, goals, emis, subs, splits, wishlist, currency };
     const a = document.createElement("a"); a.href = "data:application/json," + encodeURIComponent(JSON.stringify(data));
     a.download = "salary_tracker_backup.json"; a.click();
+  };
+
+  const handleImportClick = () => {
+    if (!importConfirm) {
+      setImportConfirm(true);
+      return;
+    }
+    importJSON();
   };
 
   const importJSON = () => {
@@ -1263,8 +1599,16 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
       const r = new FileReader(); r.onload = (e) => {
         try {
           const d = JSON.parse(e.target.result);
-          if (d.expenses) setExpenses(d.expenses);
-          if (d.setup) setSetup(d.setup);
+          if (d.expenses) { setExpenses(d.expenses); save("expenses", d.expenses); }
+          if (d.setup) { setSetup(d.setup); save("setup", d.setup); }
+          if (d.budgets) { setBudgets(d.budgets); save("budgets", d.budgets); }
+          if (d.goals) { setGoals(d.goals); save("goals", d.goals); }
+          if (d.emis) { setEmis(d.emis); save("emis", d.emis); }
+          if (d.subs) { setSubs(d.subs); save("subs", d.subs); }
+          if (d.splits) { setSplits(d.splits); save("splits", d.splits); }
+          if (d.wishlist) { setWishlist(d.wishlist); save("wishlist", d.wishlist); }
+          if (d.currency) { setCurrency(d.currency); save("currency", d.currency); }
+          setImportConfirm(false);
         } catch { alert("Invalid backup file"); }
       }; r.readAsText(f);
     };
@@ -1272,8 +1616,20 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
   };
 
   const clearAll = () => {
-    if (!confirm) { setConfirm(true); return; }
-    localStorage.clear(); window.location.reload();
+    if (!clearConfirm) { setClearConfirm(true); return; }
+    STORAGE_KEYS.forEach(k => localStorage.removeItem(k));
+    window.location.reload();
+  };
+
+  const handlePinChange = () => {
+    if (pin && currentPin !== pin) {
+      setPinError("Incorrect current PIN");
+      return;
+    }
+    setPinError("");
+    setPin(newPin.length === 4 ? newPin : null);
+    setNewPin("");
+    setCurrentPin("");
   };
 
   return (
@@ -1286,7 +1642,17 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
           <button onClick={onClose} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", color: T.muted }}>✕</button>
         </div>
 
-        {/* Salary */}
+        <Section T={T} title="💱 Currency">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {CURRENCIES.map(c => (
+              <button key={c.code} onClick={() => setCurrency(c)}
+                style={{ padding: "8px 12px", borderRadius: 10, border: `2px solid ${currency.code === c.code ? T.accent : T.border}`, background: currency.code === c.code ? T.accent + "22" : T.card, color: currency.code === c.code ? T.accent : T.muted, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                {c.symbol} {c.label}
+              </button>
+            ))}
+          </div>
+        </Section>
+
         <Section T={T} title="💰 Salary">
           <Label T={T}>Monthly Salary</Label>
           <input type="number" value={editSalary} onChange={e => setEditSalary(e.target.value)} style={{ ...inputStyle(T), width: "100%", marginBottom: 8 }} />
@@ -1295,16 +1661,23 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
           <Btn T={T} onClick={() => setSetup({ salary: Number(editSalary), creditDay: Number(editDay) })} style={{ width: "100%" }}>Save</Btn>
         </Section>
 
-        {/* PIN */}
         <Section T={T} title="🔒 PIN Lock">
           {pin && <div style={{ color: T.muted, fontSize: 13, marginBottom: 8 }}>PIN is currently set.</div>}
-          <input type="number" placeholder="New 4-digit PIN (blank to remove)" value={newPin} onChange={e => setNewPin(e.target.value.slice(0,4))} style={{ ...inputStyle(T), width: "100%", marginBottom: 8 }} />
+          {pin && (
+            <>
+              <Label T={T}>Current PIN</Label>
+              <input type="number" placeholder="Enter current PIN" value={currentPin} onChange={e => { setCurrentPin(e.target.value.slice(0,4)); setPinError(""); }}
+                style={{ ...inputStyle(T), width: "100%", marginBottom: 8 }} />
+              {pinError && <div style={{ color: "#ef4444", fontSize: 12, marginBottom: 8 }}>{pinError}</div>}
+            </>
+          )}
+          <Label T={T}>New PIN (4 digits, blank to remove)</Label>
+          <input type="number" placeholder="New 4-digit PIN" value={newPin} onChange={e => setNewPin(e.target.value.slice(0,4))} style={{ ...inputStyle(T), width: "100%", marginBottom: 8 }} />
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn T={T} onClick={() => { setPin(newPin.length === 4 ? newPin : null); setNewPin(""); }} style={{ flex: 1 }}>{newPin.length === 4 ? "Set PIN" : "Remove PIN"}</Btn>
+            <Btn T={T} onClick={handlePinChange} style={{ flex: 1 }}>{newPin.length === 4 ? "Set PIN" : "Remove PIN"}</Btn>
           </div>
         </Section>
 
-        {/* Theme */}
         <Section T={T} title="🎨 Theme">
           <div style={{ display: "flex", gap: 8 }}>
             {["device","light","dark"].map(m => (
@@ -1316,19 +1689,20 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
           </div>
         </Section>
 
-        {/* Backup */}
         <Section T={T} title="💾 Backup">
           <div style={{ display: "flex", gap: 8 }}>
             <Btn T={T} onClick={exportJSON} style={{ flex: 1 }}>⬇ Export</Btn>
-            <Btn T={T} onClick={importJSON} secondary style={{ flex: 1 }}>⬆ Import</Btn>
+            <Btn T={T} onClick={handleImportClick} secondary style={{ flex: 1, background: importConfirm ? "#f59e0b" : undefined, color: importConfirm ? "#fff" : undefined, border: importConfirm ? "1px solid #f59e0b" : undefined }}>
+              {importConfirm ? "Tap again to confirm" : "⬆ Import"}
+            </Btn>
           </div>
+          {importConfirm && <div style={{ color: "#f59e0b", fontSize: 12, marginTop: 8 }}>⚠️ This will replace ALL your data</div>}
         </Section>
 
-        {/* Clear */}
         <Section T={T} title="⚠️ Danger Zone">
           <button onClick={clearAll} className="btn-press"
-            style={{ width: "100%", padding: "12px", borderRadius: 12, background: confirm ? "#ef4444" : "#ef444420", border: `1px solid #ef444440`, color: confirm ? "#fff" : "#ef4444", fontWeight: 700, cursor: "pointer" }}>
-            {confirm ? "⚠️ Tap again to confirm — this is irreversible!" : "🗑 Clear All Data"}
+            style={{ width: "100%", padding: "12px", borderRadius: 12, background: clearConfirm ? "#ef4444" : "#ef444420", border: `1px solid #ef444440`, color: clearConfirm ? "#fff" : "#ef4444", fontWeight: 700, cursor: "pointer" }}>
+            {clearConfirm ? "⚠️ Tap again to confirm — this is irreversible!" : "🗑 Clear All Data"}
           </button>
         </Section>
 
@@ -1338,7 +1712,6 @@ function SettingsModal({ T, setup, setSetup, pin, setPin, themeMode, onTheme, ex
   );
 }
 
-// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
 function Card({ T, children, style }) {
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 16, backdropFilter: "blur(12px)", ...style }}>
